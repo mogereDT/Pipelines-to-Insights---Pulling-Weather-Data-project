@@ -95,9 +95,30 @@ app.title = "Kentucky Weather Dashboard"
 
 app.layout = html.Div([
     html.Div([
-        html.Img(src='/assets/Seal_of_Kentucky.png', style={'height': '100px', 'margin': 'auto', 'display': 'block'}),
-        html.H1("Kentucky Weather Dashboard", style={'textAlign': 'center'})
+    html.Div([
+        html.Img(src='/assets/Seal_of_Kentucky.png', style={
+            'height': '100px', 'margin': 'auto', 'display': 'block'
+        }),
     ]),
+
+    html.Div([
+        html.H1("Kentucky Weather Dashboard", style={
+            'textAlign': 'center', 'marginBottom': '10px'
+        }),
+        html.Div(id='last-updated', style={
+            'position': 'absolute',
+            'top': '10px',
+            'right': '20px',
+            'backgroundColor': 'black',
+            'color': 'white',
+            'padding': '5px 10px',
+            'borderRadius': '5px',
+            'fontSize': '14px',
+            'fontStyle': 'italic',
+            'zIndex': '1000'
+        })
+    ], style={'position': 'relative'})
+]),
 
     html.Div([
         html.Label("Select City:"),
@@ -147,12 +168,13 @@ app.layout = html.Div([
     ])
 ])
 
-@app.callback(
+@ app.callback(
     [Output('temp-graph', 'figure'),
      Output('humid-precip-graph', 'figure'),
      Output('wind-gauge', 'figure'),
      Output('forecast-graph', 'figure'),
-     Output('cards', 'children')],
+     Output('cards', 'children'),
+     Output('last-updated', 'children')],
     [Input('city', 'value'),
      Input('unit', 'value'),
      Input('date-picker', 'start_date'),
@@ -203,8 +225,9 @@ def update_graphs(city, unit, start_date, end_date):
             html.H4("Wind Speed"), html.P(f"{dff['wind_speed'].mean():.1f} mph")
         ])
     ]
+    last_updated = f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-    return temp_fig, humid_fig, wind_fig, forecast_fig, cards
+    return temp_fig, humid_fig, wind_fig, forecast_fig, cards, last_updated
 
 if __name__ == '__main__':
     app.run(debug=True)
