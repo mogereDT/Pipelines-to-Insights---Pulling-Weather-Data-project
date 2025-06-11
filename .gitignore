@@ -1,0 +1,16 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Cache files
+.cache/
+__pycache__/
+.pytest_cache/
+
+# IDE files
+.idea/
+.vscode/ 

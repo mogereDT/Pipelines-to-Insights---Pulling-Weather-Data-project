@@ -1,57 +1,6 @@
-
----
-
-### 3) `rough_draft_weather.py`
-```python
-# rough_draft_weather.py
-# Run once if needed:
-# pip install dash pandas plotly requests openmeteo-requests requests-cache retry-requests
-
-import openmeteo_requests
-import pandas as pd
-import requests_cache
-from retry_requests import retry
-
-# ─── GROUP PROJECT: Open-Meteo API client with cache+retry ────────────────────
-cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-openmeteo = openmeteo_requests.Client(session=retry_session)
-
-# Raw Open-Meteo example (for teammates)
-url = "https://api.open-meteo.com/v1/forecast"
-params = {
-    "latitude":  [36.9685, 38.0406, 38.2527],
-    "longitude": [-86.4808, -84.5037, -85.7585],
-    "hourly":    [
-        "temperature_2m",
-        "precipitation",
-        "visibility",
-        "wind_speed_10m",
-        "relative_humidity_2m"
-    ]
-}
-responses = openmeteo.weather_api(url, params=params)
-response = responses[0]
-hourly = response.Hourly()
-hourly_data = {
-    "date": pd.date_range(
-        start=pd.to_datetime(hourly.Time(),    unit="s", utc=True),
-        end=  pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-        freq=pd.Timedelta(seconds=hourly.Interval()),
-        inclusive="left"
-    ),
-    "temperature_2m":       hourly.Variables(0).ValuesAsNumpy().round(0),
-    "precipitation_mm":     hourly.Variables(1).ValuesAsNumpy().round(0),
-    "visibility":           hourly.Variables(2).ValuesAsNumpy().round(0),
-    "wind_speed_10m_kmh":   hourly.Variables(3).ValuesAsNumpy().round(0),
-    "relative_humidity_%":  hourly.Variables(4).ValuesAsNumpy().round(0)
-}
-hourly_df = pd.DataFrame(hourly_data)
-print("Raw Open-Meteo example (first 5 rows):")
-print(hourly_df.head())
-
 # ─── Dash app pulls the same API under the hood ───────────────────────────────
 import dash
+import pandas as pd
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
@@ -61,8 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ─── Serve /mnt/data (your Desktop assets) as Dash assets ────────────────────
-ASSETS_PATH = Path("/mnt/data")
-app = dash.Dash(__name__, assets_folder=str(ASSETS_PATH))
+app = dash.Dash(__name__)
 app.title = "KY Weather Dashboard"
 
 # ─── Supported cities (lat, lon untouched) ───────────────────────────────────
@@ -131,70 +79,80 @@ default_city = 'Louisville, KY'
 hist_df = fetch_weather_data(default_city)
 
 # ─── Layout (Forecast first) ───────────────────────────────────────────────────
-app.layout = html.Div([
+app.layout = html.Div(id='app-container', children=[
     html.Div([
         html.Img(src=app.get_asset_url("Seal_of_Kentucky.png"),
                  style={'height':'80px','display':'block','margin':'auto'}),
         html.H1("Kentucky Weather Dashboard", style={'textAlign':'center'})
     ]),
-    html.Div([
-        html.Label("Select City:"), dcc.Dropdown(
-            id='city',
-            options=[{'label':k,'value':k} for k in cities],
-            value=default_city
-        ),
-        html.Label("Temperature Unit:"), dcc.RadioItems(
-            id='temp-unit',
-            options=[{'label':'°F','value':'fahrenheit'},
-                     {'label':'°C','value':'celsius'}],
-            value='fahrenheit',
-            labelStyle={'display':'inline-block','marginRight':'15px'}
-        ),
-        html.Label("Wind Speed Unit:"), dcc.RadioItems(
-            id='wind-unit',
-            options=[{'label':'mph','value':'mph'},
-                     {'label':'km/h','value':'kph'}],
-            value='mph',
-            labelStyle={'display':'inline-block','marginRight':'15px'}
-        ),
-        html.Label("Precipitation Unit:"), dcc.RadioItems(
-            id='precip-unit',
-            options=[{'label':'inches','value':'in'},
-                     {'label':'cm','value':'cm'}],
-            value='in',
-            labelStyle={'display':'inline-block','marginRight':'15px'}
-        ),
-        dcc.DatePickerRange(
-            id='date-picker',
-            start_date=hist_df['date'].min(),
-            end_date=hist_df['date'].max(),
-            display_format='YYYY-MM-DD'
-        ),
-    ], style={'padding':'20px'}),
+    html.Div(className='control-panel', children=[
+        html.Div([
+            html.Label("Select City:"), dcc.Dropdown(
+                id='city',
+                options=[{'label':k,'value':k} for k in cities],
+                value=default_city
+            )
+        ]),
+        html.Div([
+            html.Label("Temperature Unit:"), dcc.RadioItems(
+                id='temp-unit',
+                options=[{'label':'°F','value':'fahrenheit'},
+                         {'label':'°C','value':'celsius'}],
+                value='fahrenheit',
+                labelStyle={'display':'inline-block','marginRight':'15px'}
+            )
+        ]),
+        html.Div([
+            html.Label("Wind Speed Unit:"), dcc.RadioItems(
+                id='wind-unit',
+                options=[{'label':'mph','value':'mph'},
+                         {'label':'km/h','value':'kph'}],
+                value='mph',
+                labelStyle={'display':'inline-block','marginRight':'15px'}
+            )
+        ]),
+        html.Div([
+            html.Label("Precipitation Unit:"), dcc.RadioItems(
+                id='precip-unit',
+                options=[{'label':'inches','value':'in'},
+                         {'label':'cm','value':'cm'}],
+                value='in',
+                labelStyle={'display':'inline-block','marginRight':'15px'}
+            )
+        ]),
+        html.Div([
+            html.Label("Date Range:"),
+            dcc.DatePickerRange(
+                id='date-picker',
+                start_date=hist_df['date'].min(),
+                end_date=hist_df['date'].max(),
+                display_format='YYYY-MM-DD'
+            ),
+        ])
+    ]),
 
     html.H3("7-Day Forecast", style={'textAlign':'center','marginTop':'20px'}),
-    html.Div([
-        html.Img(src=app.get_asset_url("sun.png"), style={'height':'40px'}),
+    html.Div(className='graph-container', children=[
+        html.Img(src=app.get_asset_url("sun.png"), className='graph-icon'),
         dcc.Graph(id='forecast-graph')
     ]),
 
-    html.Div(id='cards',
-             style={'display':'flex','justifyContent':'space-around','margin':'20px 0'}),
+    html.Div(id='cards', className='card-container'),
 
-    html.Div([
-        html.Img(src=app.get_asset_url("sun.png"), style={'height':'40px'}),
+    html.Div(className='graph-container', children=[
+        html.Img(src=app.get_asset_url("sun.png"), className='graph-icon'),
         dcc.Graph(id='temp-graph')
     ]),
-    html.Div([
-        html.Img(src=app.get_asset_url("rain.png"), style={'height':'40px'}),
+    html.Div(className='graph-container', children=[
+        html.Img(src=app.get_asset_url("rain.png"), className='graph-icon'),
         dcc.Graph(id='humidity-graph')
     ]),
-    html.Div([
-        html.Img(src=app.get_asset_url("rain.png"), style={'height':'40px'}),
+    html.Div(className='graph-container', children=[
+        html.Img(src=app.get_asset_url("rain.png"), className='graph-icon'),
         dcc.Graph(id='precip-graph')
     ]),
-    html.Div([
-        html.Img(src=app.get_asset_url("wind.png"), style={'height':'40px'}),
+    html.Div(className='graph-container', children=[
+        html.Img(src=app.get_asset_url("wind.png"), className='graph-icon'),
         dcc.Graph(id='wind-gauge')
     ]),
 ])
@@ -249,10 +207,12 @@ def update_all(city, temp_unit, wind_unit, precip_unit):
 
     # Precip → rounded
     if precip_unit=='in':
-        df['precip'] = (df['precip_mm']/25.4).round(0)
-        p_lbl = 'in'
+        df['precip'] = (df['precip_mm']/25.4).round(2)
+        fdf['precip'] = (fdf['precip_mm']/25.4).round(2)
+        p_lbl = 'inches'
     else:
-        df['precip'] = (df['precip_mm']/10).round(0)
+        df['precip'] = (df['precip_mm']/10).round(2)
+        fdf['precip'] = (fdf['precip_mm']/10).round(2)
         p_lbl = 'cm'
 
     # humidity_% already rounded on creation
@@ -262,48 +222,42 @@ def update_all(city, temp_unit, wind_unit, precip_unit):
 
     # Figures
     forecast_fig = px.line(
-        fdf, x='date', y=['temp_max','temp_min'],
-        labels={'value':f'Temp ({f_lbl})','variable':'Type'},
-        title=f"{city} 7-Day Forecast"
+        fdf, x='date', y=['temp_max', 'temp_min'],
+        title=f"{city} 7-Day Forecast ({f_lbl})",
+        labels={'value': f"Temp ({f_lbl})", 'date': 'Date', 'variable': 'Temp Type'}
     )
     temp_fig = px.line(
-        df, x='date', y=['temp_max','temp_min'],
-        labels={'value':f'Temp ({t_lbl})','variable':'Type'},
-        title=f"{city} (Historical)"
+        df, x='date', y=['temp_max', 'temp_min'],
+        title=f'Historical Temperatures ({t_lbl})',
+        labels={'value': f"Temp ({t_lbl})", 'date': 'Date', 'variable': 'Temp Type'}
     )
     humidity_fig = px.line(
         df, x='date', y='humidity_%',
-        labels={'humidity_%':'Humidity (%)'},
-        title="Humidity (Historical)"
+        title='Historical Humidity (%)',
+        labels={'humidity_%': 'Humidity (%)', 'date': 'Date'}
     )
     precip_fig = px.bar(
         df, x='date', y='precip',
-        labels={'precip':f'Precipitation ({p_lbl})'},
-        title="Precipitation (Historical)"
+        title=f'Historical Precipitation ({p_lbl})',
+        labels={'precip': f'Precipitation ({p_lbl})', 'date': 'Date'}
     )
+    wind_val = df['wind'].iloc[-1] if not df.empty else 0
     wind_fig = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=df['wind'].mean().round(0),
-        title={'text':f"Avg Wind Speed ({w_lbl})"},
-        gauge={
-            'axis':{'range':[0, df['wind'].max()*1.2]},
-            'steps':[
-                {'range':[0,10], 'color':"lightgreen"},
-                {'range':[10,20],'color':"yellow"},
-                {'range':[20,df['wind'].max()*1.2],'color':"red"}
-            ]
-        }
+        value=wind_val,
+        title={'text': f"Latest Wind Speed ({w_lbl})"},
+        gauge={ 'axis': {'range': [None, (50 if w_lbl == 'mph' else 80)]} }
     ))
 
     # Cards
     cards = [
-        html.Div([html.H4("Max Temp"),     html.P(f"{df['temp_max'].max():.0f}{t_lbl}")]),
-        html.Div([html.H4("Min Temp"),     html.P(f"{df['temp_min'].min():.0f}{t_lbl}")]),
-        html.Div([html.H4("Precipitation"),html.P(f"{df['precip'].sum():.0f} {p_lbl}")]),
-        html.Div([html.H4("Wind Speed"),   html.P(f"{df['wind'].mean():.0f} {w_lbl}")])
+        html.Div(className='card', children=[html.H4("Max Temp"), html.P(f"{df['temp_max'].max():.1f}{t_lbl}")]),
+        html.Div(className='card', children=[html.H4("Min Temp"), html.P(f"{df['temp_min'].min():.1f}{t_lbl}")]),
+        html.Div(className='card', children=[html.H4("Total Precip"), html.P(f"{df['precip'].sum():.2f} {p_lbl}")]),
+        html.Div(className='card', children=[html.H4("Avg Wind"), html.P(f"{df['wind'].mean():.1f} {w_lbl}")])
     ]
 
-    return forecast_fig, temp_fig, humidity_fig, precip_fig, wind_fig, cards, start, end
+    return forecast_fig, temp_fig, humidity_fig, precip_fig, wind_fig, cards, df['date'].min(), df['date'].max()
 
 if __name__ == '__main__':
     # accessible from anywhere on your LAN at port 8050
